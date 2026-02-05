@@ -11,6 +11,8 @@ import sqlite3
 from datetime import datetime
 import pandas as pd
 import re
+import psycopg2
+from supabase import create_client
 
 # --- KONFIGURASI HALAMAN ---
 st.set_page_config(
@@ -227,54 +229,52 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- DATABASE SETUP ---
-def init_database():
-    """Initialize SQLite database for history"""
-    conn = sqlite3.connect('vye_history.db')
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS analysis_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT NOT NULL,
-            video_title TEXT NOT NULL,
-            video_url TEXT NOT NULL,
-            summary TEXT NOT NULL,
-            language TEXT NOT NULL,
-            mode TEXT NOT NULL
-        )
-    ''')
-    conn.commit()
-    conn.close()
-
-def save_to_database(video_title, video_url, summary, language, mode="Single Analysis"):
-    """Save analysis result to database"""
+@st.cache_resource
+def init_supabase():
     try:
-        conn = sqlite3.connect('vye_history.db')
-        c = conn.cursor()
-        date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        c.execute('''
-            INSERT INTO analysis_history (date, video_title, video_url, summary, language, mode)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (date, video_title, video_url, summary, language, mode))
-        conn.commit()
-        conn.close()
-        return True
+        url = st.secrets["SUPABASE_URL"]
+        key = st.secrets["SUPABASE_KEY"]
+        return create_client(url, key)
     except Exception as e:
-        st.error(f"Database error: {str(e)}")
-        return False
+        st.error(f"Config Error: {e}")
+        return None
 
-def get_history():
-    """Retrieve all history from database"""
-    try:
-        conn = sqlite3.connect('vye_history.db')
-        df = pd.read_sql_query("SELECT * FROM analysis_history ORDER BY date DESC", conn)
-        conn.close()
-        return df
-    except Exception as e:
-        st.error(f"Error loading history: {str(e)}")
-        return pd.DataFrame()
+def save_to_db(title, url, summary, lang):
+    supabase = init_supabase()
+    if supabase:
+        try:
+            date_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            short_summary = summary[:1000] + "..." if len(summary) > 1000 else summary
+            
+            # Kirim data via HTTP Request (JSON)
+            data = {
+                "date": date_now,
+                "video_title": title,
+                "video_url": url,
+                "analysis_summary": short_summary,
+                "language": lang
+            }
+            # Insert ke tabel 'history'
+            supabase.table("history").insert(data).execute()
+        except Exception as e:
+            st.error(f"Gagal simpan ke Cloud: {e}")
 
-# Initialize database
-init_database()
+def save_to_database(title, url, summary, lang, analysis_type):
+    """Wrapper function to save analysis to database with analysis type"""
+    save_to_db(title, url, summary, lang)
+
+def load_history():
+    supabase = init_supabase()
+    if supabase:
+        try:
+            # Ambil data via HTTP Request
+            response = supabase.table("history").select("*").order("id", desc=True).execute()
+            data = response.data
+            if data:
+                return pd.DataFrame(data)
+        except Exception as e:
+            st.error(f"Gagal load data: {e}")
+    return pd.DataFrame()
 
 # --- PDF GENERATION ---
 class PDF(FPDF):
@@ -993,7 +993,7 @@ elif app_mode == "🗄️ History Database":
     st.markdown("<br>", unsafe_allow_html=True)
     
     # Load history
-    df = get_history()
+    df = load_history()
     
     if not df.empty:
         st.markdown(f"### 📊 Total Records: {len(df)}")
