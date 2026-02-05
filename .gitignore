@@ -2,3 +2,4 @@ cookies.txt
 secrets.toml
 venv/
 __pycache__/
+temp_subs*
