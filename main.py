@@ -6,6 +6,11 @@ import glob
 import requests
 from PIL import Image
 from io import BytesIO
+from fpdf import FPDF
+import sqlite3
+from datetime import datetime
+import pandas as pd
+import re
 
 # --- KONFIGURASI HALAMAN ---
 st.set_page_config(
@@ -134,6 +139,13 @@ st.markdown("""
         border: 1px solid rgba(255, 255, 255, 0.1);
     }
     
+    /* Select Box */
+    .stSelectbox > div > div {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+    }
+    
     /* Info Box */
     .stAlert {
         background: rgba(0, 217, 255, 0.1);
@@ -202,8 +214,131 @@ st.markdown("""
     hr {
         border-color: rgba(255, 255, 255, 0.1);
     }
+    
+    /* Battle Columns */
+    .battle-column {
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 15px;
+        padding: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        height: 100%;
+    }
 </style>
 """, unsafe_allow_html=True)
+
+# --- DATABASE SETUP ---
+def init_database():
+    """Initialize SQLite database for history"""
+    conn = sqlite3.connect('vye_history.db')
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS analysis_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL,
+            video_title TEXT NOT NULL,
+            video_url TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            language TEXT NOT NULL,
+            mode TEXT NOT NULL
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def save_to_database(video_title, video_url, summary, language, mode="Single Analysis"):
+    """Save analysis result to database"""
+    try:
+        conn = sqlite3.connect('vye_history.db')
+        c = conn.cursor()
+        date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        c.execute('''
+            INSERT INTO analysis_history (date, video_title, video_url, summary, language, mode)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (date, video_title, video_url, summary, language, mode))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"Database error: {str(e)}")
+        return False
+
+def get_history():
+    """Retrieve all history from database"""
+    try:
+        conn = sqlite3.connect('vye_history.db')
+        df = pd.read_sql_query("SELECT * FROM analysis_history ORDER BY date DESC", conn)
+        conn.close()
+        return df
+    except Exception as e:
+        st.error(f"Error loading history: {str(e)}")
+        return pd.DataFrame()
+
+# Initialize database
+init_database()
+
+# --- PDF GENERATION ---
+class PDF(FPDF):
+    def header(self):
+        self.set_font('Arial', 'B', 16)
+        self.set_text_color(0, 100, 200)
+        self.cell(0, 10, 'VYE - Video Analysis Report', 0, 1, 'C')
+        self.ln(5)
+    
+    def footer(self):
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.set_text_color(128, 128, 128)
+        self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
+    
+    def chapter_title(self, title):
+        self.set_font('Arial', 'B', 14)
+        self.set_text_color(0, 150, 255)
+        self.cell(0, 10, title, 0, 1, 'L')
+        self.ln(3)
+    
+    def chapter_body(self, body):
+        self.set_font('Arial', '', 11)
+        self.set_text_color(0, 0, 0)
+        # Clean text from emojis and special characters
+        body = self.clean_text(body)
+        self.multi_cell(0, 6, body)
+        self.ln()
+    
+    def clean_text(self, text):
+        """Remove emojis and non-ASCII characters"""
+        # Remove emojis
+        text = re.sub(r'[^\x00-\x7F]+', ' ', text)
+        # Remove multiple spaces
+        text = re.sub(r'\s+', ' ', text)
+        return text.strip()
+
+def generate_pdf(video_title, analysis_text):
+    """Generate PDF report"""
+    try:
+        pdf = PDF()
+        pdf.add_page()
+        
+        # Add metadata
+        pdf.set_font('Arial', '', 10)
+        pdf.set_text_color(100, 100, 100)
+        pdf.cell(0, 8, f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M")}', 0, 1)
+        pdf.ln(5)
+        
+        # Video Title
+        pdf.chapter_title('Video Title:')
+        pdf.chapter_body(video_title)
+        
+        # Analysis
+        pdf.chapter_title('Strategic Analysis:')
+        pdf.chapter_body(analysis_text)
+        
+        # Save
+        filename = f"vye_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        pdf.output(filename)
+        return filename
+    except Exception as e:
+        st.error(f"PDF Generation Error: {str(e)}")
+        return None
 
 # --- SIDEBAR & SETUP ---
 with st.sidebar:
@@ -225,10 +360,20 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # MODE SELECTOR
+    # LANGUAGE SELECTOR (NEW FEATURE #2)
+    st.markdown("### 🌐 Output Language")
+    output_language = st.selectbox(
+        "Select analysis language:",
+        ["Indonesian", "English", "Javanese Style", "Formal Business"],
+        help="AI will generate analysis in this language/style"
+    )
+    
+    st.markdown("---")
+    
+    # MODE SELECTOR (UPDATED WITH NEW MODES)
     app_mode = st.radio(
         "🎯 Select Mode:", 
-        ["📊 Single Analysis", "⚔️ Battle Mode"],
+        ["📊 Single Analysis", "⚔️ Battle Mode", "⚖️ Prompt Battle", "🗄️ History Database"],
         help="Pilih mode analisis sesuai kebutuhan"
     )
     
@@ -240,9 +385,20 @@ with st.sidebar:
     st.markdown("<br>" * 3, unsafe_allow_html=True)
     st.caption("Powered by Gemini AI")
 
-# --- PROMPTS ---
+# --- LANGUAGE PROMPTS MAPPER ---
+LANGUAGE_INSTRUCTIONS = {
+    "Indonesian": "Berikan semua analisis dalam Bahasa Indonesia yang profesional dan mudah dipahami.",
+    "English": "Provide all analysis in professional, clear English.",
+    "Javanese Style": "Berikan analisis dalam gaya bahasa Jawa yang halus namun tetap informatif. Gunakan beberapa istilah Jawa yang sopan.",
+    "Formal Business": "Provide analysis in formal business language, suitable for corporate presentations and executive reports."
+}
 
-STRATEGY_PROMPT = """
+# --- PROMPTS ---
+def get_strategy_prompt(language):
+    """Generate strategy prompt with language instruction"""
+    return f"""
+{LANGUAGE_INSTRUCTIONS[language]}
+
 Kamu adalah Expert YouTube Strategist. Analisis transkrip ini dengan detail:
 
 ## 📊 Executive Summary
@@ -278,7 +434,11 @@ Analisis thumbnail ini berdasarkan:
 Berikan saran konkret untuk meningkatkan CTR minimal 20%.
 """
 
-COMPETITOR_PROMPT = """
+def get_competitor_prompt(language):
+    """Generate competitor prompt with language instruction"""
+    return f"""
+{LANGUAGE_INSTRUCTIONS[language]}
+
 Kamu adalah Strategic Content Analyst. Lakukan analisis kompetitif mendalam.
 
 ## 🏆 The Winner
@@ -324,8 +484,47 @@ Buat scoring untuk kedua video (skala 1-10):
 DATA TRANSKRIP:
 """
 
-# --- FUNGSI HELPER ---
+# PROMPT BATTLE PERSONAS (NEW FEATURE #3)
+def get_corporate_prompt(language):
+    """Corporate Consultant Persona"""
+    return f"""
+{LANGUAGE_INSTRUCTIONS[language]}
 
+You are a CORPORATE STRATEGY CONSULTANT specializing in business content optimization.
+
+Analyze this video with a focus on:
+- ROI potential and monetization opportunities
+- Professional credibility and authority building
+- B2B appeal and enterprise value
+- Data-driven metrics and KPIs
+- Formal presentation quality
+
+Provide strategic recommendations suitable for board presentations.
+
+TRANSCRIPT:
+"""
+
+def get_genz_prompt(language):
+    """Gen-Z Viral Expert Persona"""
+    return f"""
+{LANGUAGE_INSTRUCTIONS[language]}
+
+You are a VIRAL GEN-Z CONTENT STRATEGIST. You live and breathe TikTok, Reels, and Shorts.
+
+Analyze this video focusing on:
+- Hook strength in first 3 seconds
+- Viral moment potential
+- Meme-ability and shareability
+- Gen-Z slang and relatability
+- Short-form content adaptation
+- Social media algorithm optimization
+
+Give advice using modern internet language. Be energetic and trend-focused!
+
+TRANSCRIPT:
+"""
+
+# --- FUNGSI HELPER ---
 def get_transcript_data(video_url):
     """Extract transcript, title, and thumbnail from YouTube video"""
     # Bersihkan temp file lama
@@ -376,6 +575,7 @@ def get_transcript_data(video_url):
             return full_text, title, thumb_url
 
     except Exception as e:
+        st.error(f"Extraction error: {str(e)}")
         return None, None, None
 
 def load_image_from_url(url):
@@ -411,6 +611,10 @@ if app_mode == "📊 Single Analysis":
         st.session_state.thumb_url = None
     if 'chat_history' not in st.session_state: 
         st.session_state.chat_history = []
+    if 'strategy_analysis' not in st.session_state:
+        st.session_state.strategy_analysis = None
+    if 'video_url' not in st.session_state:
+        st.session_state.video_url = None
 
     # Analyze Button
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -423,7 +627,9 @@ if app_mode == "📊 Single Analysis":
                         st.session_state.transcript = transcript
                         st.session_state.video_title = title
                         st.session_state.thumb_url = thumb
+                        st.session_state.video_url = url
                         st.session_state.chat_history = []
+                        st.session_state.strategy_analysis = None
                         st.success("✅ Data extracted successfully!")
                         st.rerun()
                     else:
@@ -444,6 +650,7 @@ if app_mode == "📊 Single Analysis":
             st.markdown(f"### {st.session_state.video_title}")
             st.caption(f"📝 Transcript Length: {len(st.session_state.transcript):,} characters")
             st.caption(f"💬 Words: ~{len(st.session_state.transcript.split()):,}")
+            st.caption(f"🌐 Output Language: **{output_language}**")
         
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -465,11 +672,44 @@ if app_mode == "📊 Single Analysis":
                     try:
                         model = genai.GenerativeModel('gemini-2.5-flash')
                         response = model.generate_content(
-                            STRATEGY_PROMPT + st.session_state.transcript[:30000]
+                            get_strategy_prompt(output_language) + st.session_state.transcript[:30000]
                         )
+                        st.session_state.strategy_analysis = response.text
                         st.markdown(response.text)
+                        
+                        # Save to database (NEW FEATURE #4)
+                        save_to_database(
+                            st.session_state.video_title,
+                            st.session_state.video_url,
+                            response.text[:500] + "...",  # Save summary
+                            output_language,
+                            "Single Analysis"
+                        )
+                        
                     except Exception as e:
                         st.error(f"❌ Error: {str(e)}")
+            
+            # PDF Download Button (NEW FEATURE #1)
+            if st.session_state.strategy_analysis:
+                st.markdown("---")
+                col1, col2, col3 = st.columns([1, 2, 1])
+                with col2:
+                    if st.button("📥 Download PDF Report", key="pdf_btn"):
+                        with st.spinner("📄 Generating PDF..."):
+                            pdf_file = generate_pdf(
+                                st.session_state.video_title,
+                                st.session_state.strategy_analysis
+                            )
+                            if pdf_file:
+                                with open(pdf_file, "rb") as f:
+                                    st.download_button(
+                                        label="⬇️ Download PDF",
+                                        data=f,
+                                        file_name=pdf_file,
+                                        mime="application/pdf",
+                                        use_container_width=True
+                                    )
+                                st.success("✅ PDF generated successfully!")
         
         with tab2:
             st.markdown("### 🎨 Thumbnail CTR Optimization")
@@ -517,7 +757,7 @@ if app_mode == "📊 Single Analysis":
                         try:
                             model = genai.GenerativeModel('gemini-2.5-flash')
                             response = model.generate_content(
-                                f"Context:\n{st.session_state.transcript[:25000]}\n\nQuestion: {prompt}\n\nBerikan jawaban yang detail dan helpful."
+                                f"{LANGUAGE_INSTRUCTIONS[output_language]}\n\nContext:\n{st.session_state.transcript[:25000]}\n\nQuestion: {prompt}\n\nBerikan jawaban yang detail dan helpful."
                             )
                             st.markdown(response.text)
                             st.session_state.chat_history.append({
@@ -610,7 +850,7 @@ elif app_mode == "⚔️ Battle Mode":
                     
                     # AI Analysis
                     input_prompt = f"""
-                    {COMPETITOR_PROMPT}
+                    {get_competitor_prompt(output_language)}
                     
                     === VIDEO A (YOUR VIDEO) ===
                     TITLE: {title_a}
@@ -631,6 +871,15 @@ elif app_mode == "⚔️ Battle Mode":
                         st.markdown("## 📊 Battle Analysis Report")
                         st.markdown(response.text)
                         
+                        # Save to database
+                        save_to_database(
+                            f"{title_a} VS {title_b}",
+                            f"{url_a} | {url_b}",
+                            response.text[:500] + "...",
+                            output_language,
+                            "Battle Mode"
+                        )
+                        
                     except Exception as e:
                         status.update(label="❌ AI Error", state="error")
                         st.error(f"Error: {str(e)}")
@@ -639,6 +888,198 @@ elif app_mode == "⚔️ Battle Mode":
                     st.error("Failed to extract transcript from one or both videos. Check URLs and subtitle availability.")
             else:
                 st.warning("⚠️ Please enter both YouTube URLs to start the battle!")
+
+# --- MODE 3: PROMPT BATTLE (NEW FEATURE #3) ---
+elif app_mode == "⚖️ Prompt Battle":
+    
+    st.markdown("# ⚖️ Prompt Battle: A/B Testing Mode")
+    st.markdown("Compare two different AI persona analyses side-by-side")
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Input URL
+    battle_url = st.text_input(
+        "🔗 YouTube URL:", 
+        placeholder="https://youtube.com/watch?v=...",
+        help="Enter one video URL to analyze with two different AI perspectives",
+        key="battle_url"
+    )
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Battle Button
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("⚡ START PROMPT BATTLE", type="primary", key="prompt_battle_btn"):
+            if battle_url:
+                with st.spinner("🔍 Extracting video data..."):
+                    transcript, title, thumb = get_transcript_data(battle_url)
+                    
+                    if transcript:
+                        st.markdown("---")
+                        
+                        # Video Info
+                        col_img, col_info = st.columns([1, 3])
+                        with col_img:
+                            if thumb:
+                                st.image(thumb, use_container_width=True)
+                        with col_info:
+                            st.markdown(f"### {title}")
+                            st.caption(f"📝 {len(transcript):,} characters | 💬 ~{len(transcript.split()):,} words")
+                        
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        st.markdown("## 🤖 Dual AI Persona Analysis")
+                        st.markdown("---")
+                        
+                        # Two columns for parallel analysis
+                        col_corporate, col_genz = st.columns(2)
+                        
+                        # LEFT: Corporate Consultant
+                        with col_corporate:
+                            st.markdown('<div class="battle-column">', unsafe_allow_html=True)
+                            st.markdown("### 💼 Corporate Consultant")
+                            st.caption("Formal, ROI-focused, Enterprise perspective")
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            
+                            with st.spinner("🤵 Corporate analysis in progress..."):
+                                try:
+                                    model = genai.GenerativeModel('gemini-2.5-flash')
+                                    corporate_response = model.generate_content(
+                                        get_corporate_prompt(output_language) + transcript[:25000]
+                                    )
+                                    st.markdown(corporate_response.text)
+                                except Exception as e:
+                                    st.error(f"❌ Error: {str(e)}")
+                            
+                            st.markdown('</div>', unsafe_allow_html=True)
+                        
+                        # RIGHT: Gen-Z Expert
+                        with col_genz:
+                            st.markdown('<div class="battle-column">', unsafe_allow_html=True)
+                            st.markdown("### 🔥 Viral Gen-Z Expert")
+                            st.caption("Trendy, Hook-focused, Social media optimized")
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            
+                            with st.spinner("😎 Gen-Z analysis in progress..."):
+                                try:
+                                    model = genai.GenerativeModel('gemini-2.5-flash')
+                                    genz_response = model.generate_content(
+                                        get_genz_prompt(output_language) + transcript[:25000]
+                                    )
+                                    st.markdown(genz_response.text)
+                                except Exception as e:
+                                    st.error(f"❌ Error: {str(e)}")
+                            
+                            st.markdown('</div>', unsafe_allow_html=True)
+                        
+                        # Save to database
+                        save_to_database(
+                            title,
+                            battle_url,
+                            "Prompt Battle: Corporate vs Gen-Z analysis completed",
+                            output_language,
+                            "Prompt Battle"
+                        )
+                        
+                    else:
+                        st.error("❌ Failed to extract video data. Check the URL or subtitle availability.")
+            else:
+                st.warning("⚠️ Please enter a YouTube URL first")
+
+# --- MODE 4: HISTORY DATABASE (NEW FEATURE #4) ---
+elif app_mode == "🗄️ History Database":
+    
+    st.markdown("# 🗄️ Analysis History Database")
+    st.markdown("View and export all your previous analysis results")
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Load history
+    df = get_history()
+    
+    if not df.empty:
+        st.markdown(f"### 📊 Total Records: {len(df)}")
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Display dataframe
+        st.dataframe(
+            df,
+            use_container_width=True,
+            height=500,
+            column_config={
+                "id": "ID",
+                "date": "Date",
+                "video_title": "Video Title",
+                "video_url": "URL",
+                "summary": "Summary",
+                "language": "Language",
+                "mode": "Mode"
+            }
+        )
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Export to CSV
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            csv = df.to_csv(index=False)
+            st.download_button(
+                label="📥 Export to CSV",
+                data=csv,
+                file_name=f"vye_history_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Statistics
+        st.markdown("---")
+        st.markdown("### 📈 Quick Statistics")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Total Analyses", len(df))
+        
+        with col2:
+            if 'language' in df.columns:
+                most_common_lang = df['language'].mode()[0] if not df['language'].mode().empty else "N/A"
+                st.metric("Most Used Language", most_common_lang)
+        
+        with col3:
+            if 'mode' in df.columns:
+                most_common_mode = df['mode'].mode()[0] if not df['mode'].mode().empty else "N/A"
+                st.metric("Most Used Mode", most_common_mode)
+        
+        with col4:
+            if 'date' in df.columns:
+                latest_date = df['date'].max()
+                st.metric("Latest Analysis", latest_date[:10] if latest_date else "N/A")
+        
+        # Language distribution
+        if 'language' in df.columns:
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("### 🌐 Language Distribution")
+            lang_counts = df['language'].value_counts()
+            st.bar_chart(lang_counts)
+        
+        # Clear history option
+        st.markdown("<br>" * 2, unsafe_allow_html=True)
+        st.markdown("---")
+        if st.button("🗑️ Clear All History", key="clear_history"):
+            if st.button("⚠️ Confirm Delete", key="confirm_clear"):
+                try:
+                    conn = sqlite3.connect('vye_history.db')
+                    c = conn.cursor()
+                    c.execute("DELETE FROM analysis_history")
+                    conn.commit()
+                    conn.close()
+                    st.success("✅ History cleared successfully!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error: {str(e)}")
+    
+    else:
+        st.info("📭 No analysis history found yet. Start analyzing videos to build your database!")
 
 # --- FOOTER ---
 st.markdown("<br>" * 3, unsafe_allow_html=True)
