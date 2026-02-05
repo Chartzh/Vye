@@ -3,3 +3,5 @@ secrets.toml
 venv/
 __pycache__/
 temp_subs*
+vye_report*
+vye_history.db
