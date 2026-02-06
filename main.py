@@ -12,6 +12,7 @@ import sqlite3
 from datetime import datetime
 import pandas as pd
 import re
+import time
 import psycopg2
 from supabase import create_client
 
@@ -277,6 +278,24 @@ def load_history():
             st.error(f"Gagal load data: {e}")
     return pd.DataFrame()
 
+@st.cache_data(ttl=60) # Cache 1 menit biar gak berat loadingnya
+def get_unique_channels():
+    """Mengambil daftar nama channel yang unik dari database"""
+    supabase = init_supabase()
+    try:
+        # Ambil kolom channel_name saja
+        response = supabase.table("channel_knowledge").select("channel_name").execute()
+        
+        if response.data:
+            # Pakai set() untuk menghapus duplikat, lalu urutkan
+            unique_names = sorted(list(set([row['channel_name'] for row in response.data])))
+            return ["Semua Channel"] + unique_names
+        else:
+            return ["Semua Channel"]
+    except Exception as e:
+        # Kalau error (misal tabel kosong), return default aja
+        return ["Semua Channel"]
+
 # --- PDF GENERATION ---
 class PDF(FPDF):
     def header(self):
@@ -346,6 +365,8 @@ def search_channel_brain(query_text, channel_name, match_count=5):
     supabase = init_supabase()
     
     try:
+        # 1. Embedding DULUAN (Wajib)
+        # Pastikan modelnya SAMA dengan saat ingest (ingest pake gemini-embedding-001 kan?)
         res = client_genai.models.embed_content(
             model="gemini-embedding-001",
             contents=query_text,
@@ -353,20 +374,30 @@ def search_channel_brain(query_text, channel_name, match_count=5):
         )
         query_vector = res.embeddings[0].values
         
-        # Kirim filter_channel ke RPC
-        response = supabase.rpc('match_documents', {
-            'query_embedding': query_vector,
-            'match_threshold': 0.1, # Turunin dikit biar makin sensitif
-            'match_count': match_count,
-            'filter_channel': channel_name 
-        }).execute()
+        # 2. Tentukan mau panggil RPC yang mana
+        if channel_name == "Semua Channel":
+            # Panggil fungsi SQL khusus tanpa filter
+            # Parameter cuma butuh vektor, threshold, dan count
+            response = supabase.rpc('match_documents_all', {
+                'query_embedding': query_vector,
+                'match_threshold': 0.1,
+                'match_count': match_count
+            }).execute()
+        else:
+            # Panggil fungsi SQL standar dengan filter channel
+            response = supabase.rpc('match_documents', {
+                'query_embedding': query_vector,
+                'match_threshold': 0.1,
+                'match_count': match_count,
+                'filter_channel': channel_name 
+            }).execute()
         
         return response.data if response.data else []
+
     except Exception as e:
         st.error(f"RAG Search Error: {e}")
         return []
-
-
+    
 # --- SIDEBAR & SETUP ---
 with st.sidebar:
     st.markdown('<div class="logo-text">VYE</div>', unsafe_allow_html=True)
@@ -405,6 +436,25 @@ with st.sidebar:
     )
     
     st.markdown("---")
+    with st.expander("➕ Tambah Channel Baru (Auto Ingest)"):
+        st.caption("Masukkan link channel untuk dipelajari AI")
+        ingest_url = st.text_input("Channel URL", placeholder="https://youtube.com/@...")
+        ingest_name = st.text_input("Nama Label", placeholder="GadgetIn")
+        
+        if st.button("Mulai Belajar 🚀", key="btn_ingest"):
+            if ingest_url and ingest_name:
+                with st.spinner("Sedang memproses..."):
+                    try:
+                        import ingest_channel
+                        jumlah_masuk = ingest_channel.process_channel(ingest_url, ingest_name)
+                        
+                        if jumlah_masuk > 0:
+                            st.success(f"{jumlah_masuk} Video berhasil masuk Database.")
+                        else:
+                            st.error("❌ Gagal. Tidak ada video yang berhasil diproses.")
+                            
+                    except ImportError:
+                        st.error("File ingest_channel.py tidak ditemukan.")
     
     # Info Box
     st.info(f"🔥 Active: **{app_mode}**")
@@ -1116,7 +1166,8 @@ elif app_mode == "🧠 Channel Brain":
     if "rag_chat_history" not in st.session_state:
         st.session_state.rag_chat_history = []
 
-    selected_channel = st.selectbox("Pilih Channel:", ["MedyRenaldy", "GadgetIn"])
+    dynamic_options = get_unique_channels()
+    selected_channel = st.selectbox("Pilih Channel:", dynamic_options)
 
     # Tampilkan History Visual
     for message in st.session_state.rag_chat_history:
@@ -1145,11 +1196,16 @@ elif app_mode == "🧠 Channel Brain":
                     
                     client_genai = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
                     
-                    # PROMPT DENGAN MEMORI & CONTEKKAN
+                    # PROMPT DENGAN MEMORI 
                     prompt = f"""
                     Kamu adalah asisten ahli yang menjawab berdasarkan database video YouTube.
                     Gunakan DATA CONTEKAN di bawah untuk menjawab pertanyaan user.
-                    Gunakan RIWAYAT PERCAKAPAN untuk memahami konteks jika user bertanya menggunakan kata ganti (dia, itu, mereka).
+                    Gunakan RIWAYAT PERCAKAPAN untuk memahami konteks.
+                    
+                    INSTRUKSI GAYA BAHASA:
+                    1. Jawablah dengan gaya narasi yang mengalir dan natural (seperti manusia berbicara).
+                    2. JANGAN menyertakan timestamp [menit:detik] di dalam teks jawaban utama agar mudah dibaca.
+                    3. Rangkum poin-poin penting menjadi paragraf yang utuh.
 
                     RIWAYAT PERCAKAPAN SEBELUMNYA:
                     {history_memory}
