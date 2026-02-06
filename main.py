@@ -1,5 +1,6 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import yt_dlp
 import os
 import glob
@@ -339,6 +340,32 @@ def generate_pdf(video_title, analysis_text):
     except Exception as e:
         st.error(f"PDF Generation Error: {str(e)}")
         return None
+    
+def search_channel_brain(query_text, channel_name, match_count=5):
+    client_genai = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+    supabase = init_supabase()
+    
+    try:
+        res = client_genai.models.embed_content(
+            model="gemini-embedding-001",
+            contents=query_text,
+            config=types.EmbedContentConfig(task_type="RETRIEVAL_QUERY")
+        )
+        query_vector = res.embeddings[0].values
+        
+        # Kirim filter_channel ke RPC
+        response = supabase.rpc('match_documents', {
+            'query_embedding': query_vector,
+            'match_threshold': 0.1, # Turunin dikit biar makin sensitif
+            'match_count': match_count,
+            'filter_channel': channel_name 
+        }).execute()
+        
+        return response.data if response.data else []
+    except Exception as e:
+        st.error(f"RAG Search Error: {e}")
+        return []
+
 
 # --- SIDEBAR & SETUP ---
 with st.sidebar:
@@ -356,7 +383,7 @@ with st.sidebar:
             st.warning("⚠️ API Key diperlukan untuk melanjutkan")
             st.stop()
     
-    genai.configure(api_key=api_key)
+    client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
     
     st.markdown("---")
     
@@ -373,7 +400,7 @@ with st.sidebar:
     # MODE SELECTOR (UPDATED WITH NEW MODES)
     app_mode = st.radio(
         "🎯 Select Mode:", 
-        ["📊 Single Analysis", "⚔️ Battle Mode", "⚖️ Prompt Battle", "🗄️ History Database"],
+        ["📊 Single Analysis", "⚔️ Battle Mode", "⚖️ Prompt Battle", "🧠 Channel Brain","🗄️ History Database"],
         help="Pilih mode analisis sesuai kebutuhan"
     )
     
@@ -1080,6 +1107,79 @@ elif app_mode == "🗄️ History Database":
     
     else:
         st.info("📭 No analysis history found yet. Start analyzing videos to build your database!")
+
+# --- MODE 5: CHANNEL BRAIN (RAG MODE) ---
+elif app_mode == "🧠 Channel Brain":
+    st.header("🧠 Channel Brain (RAG Mode)")
+    st.markdown("Tanya apa saja berdasarkan database video yang sudah dipelajari.")
+    
+    if "rag_chat_history" not in st.session_state:
+        st.session_state.rag_chat_history = []
+
+    selected_channel = st.selectbox("Pilih Channel:", ["MedyRenaldy", "GadgetIn"])
+
+    # Tampilkan History Visual
+    for message in st.session_state.rag_chat_history:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    if query := st.chat_input(f"Tanya soal {selected_channel}..."):
+        st.session_state.rag_chat_history.append({"role": "user", "content": query})
+        with st.chat_message("user"):
+            st.markdown(query)
+            
+        with st.chat_message("assistant"):
+            with st.spinner("Membongkar arsip video dan mengingat percakapan..."):
+                # 1. Retrieval: Cari potongan transkrip relevan
+                context_chunks = search_channel_brain(query, selected_channel)
+                
+                # 2. Memory: Ambil 5 pesan terakhir sebagai memori jangka pendek
+                # Ini agar AI tahu apa yang sedang dibicarakan sebelumnya
+                history_memory = "\n".join([
+                    f"{m['role'].upper()}: {m['content']}" 
+                    for m in st.session_state.rag_chat_history[-5:-1]
+                ])
+                
+                if context_chunks:
+                    context_text = "\n\n".join([f"Dikutip dari video '{c['video_title']}':\n{c['content']}" for c in context_chunks])
+                    
+                    client_genai = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+                    
+                    # PROMPT DENGAN MEMORI & CONTEKKAN
+                    prompt = f"""
+                    Kamu adalah asisten ahli yang menjawab berdasarkan database video YouTube.
+                    Gunakan DATA CONTEKAN di bawah untuk menjawab pertanyaan user.
+                    Gunakan RIWAYAT PERCAKAPAN untuk memahami konteks jika user bertanya menggunakan kata ganti (dia, itu, mereka).
+
+                    RIWAYAT PERCAKAPAN SEBELUMNYA:
+                    {history_memory}
+                    
+                    DATA CONTEKAN DARI VIDEO:
+                    {context_text}
+                    
+                    PERTANYAAN TERBARU USER:
+                    {query}
+                    
+                    Jawaban:
+                    """
+                    
+                    try:
+                        response = client_genai.models.generate_content(
+                            model="gemini-2.5-flash", 
+                            contents=prompt
+                        )
+                        full_response = response.text
+                        st.markdown(full_response)
+                        
+                        st.session_state.rag_chat_history.append({"role": "assistant", "content": full_response})
+                        
+                        with st.expander("📌 Sumber Video Terkait"):
+                            for c in context_chunks:
+                                st.write(f"- [{c['video_title']}]({c['video_url']}) (Skor: {round(c['similarity'], 2)})")
+                    except Exception as e:
+                        st.error(f"Gagal generate jawaban: {e}")
+                else:
+                    st.warning("Maaf, saya tidak menemukan informasi yang relevan di database video.")
 
 # --- FOOTER ---
 st.markdown("<br>" * 3, unsafe_allow_html=True)
