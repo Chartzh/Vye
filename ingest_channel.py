@@ -13,7 +13,7 @@ from supabase import create_client
 client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
 supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
-def get_channel_videos(channel_url, limit=2): 
+def get_channel_videos(channel_url, limit=30): 
     """Mengambil list URL video terbaru dari sebuah channel"""
     ydl_opts = {
         'extract_flat': True,
@@ -32,14 +32,14 @@ def get_channel_videos(channel_url, limit=2):
 def get_transcript(video_url):
     # Opsi "Factory Reset" - Biarkan yt-dlp mengatur dirinya sendiri
     ydl_opts = {
-        'skip_download': True,      # Kita cuma mau teks, jangan download video
-        'writesubtitles': True,     # Ambil subtitle manual
-        'writeautomaticsub': True,  # Ambil subtitle otomatis (auto-generated)
-        'subtitleslangs': ['id', 'en.*'], # Regex biar nangkep en, en-US, en-GB
+        'skip_download': True,      
+        'writesubtitles': True,    
+        'writeautomaticsub': True,  
+        'subtitleslangs': ['id', 'en.*'], 
         'outtmpl': 'temp_rag_%(id)s',
-        'quiet': True,              # Jangan berisik di terminal
+        'quiet': True,              
         'no_warnings': True,
-        'ignoreerrors': True,       # PENTING: Kalau 1 gagal, jangan matikan semua
+        'ignoreerrors': True,    
     }
     
     # Kita coba cek versi yt-dlp dulu biar yakin
@@ -133,8 +133,8 @@ def process_channel(channel_url, channel_name):
     for i, vid in enumerate(videos):
         st.write(f"📽️ Memproses ({i+1}/{len(videos)}): {vid['title']}")
         if i > 0:
-            sleep_time = random.uniform(15, 30) 
-            time.sleep(sleep_time)
+            st.write("⏳ Cooling down 60 detik biar gak kena limit Gemini...")
+            time.sleep(60) # Jeda pasti 60 detik biar aman 100%
         transcript = get_transcript(vid['url'])
         
         if transcript:
