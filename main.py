@@ -13,55 +13,128 @@ from supabase import create_client
 
 # --- KONFIGURASI HALAMAN ---
 st.set_page_config(
-    page_title="Vye",
+    page_title="Vye - AI Content Intelligence",
     page_icon="🧠",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# --- CUSTOM CSS (UI CHAT KANAN-KIRI) ---
+# --- CUSTOM CSS (TEMA VYE FIXED) ---
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
+    
+    /* === GLOBAL STYLING === */
     * { font-family: 'Inter', sans-serif; }
+    h1, h2, h3, h4, h5, h6 { font-family: 'Space Grotesk', sans-serif; font-weight: 700; }
+    
+    /* === FIX BACKGROUND (FULL GRADIENT TEMBUS BAWAH) === */
+    .stApp { background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #0f1729 100%) !important; }
+    .main, .block-container, [data-testid="stHeader"] { background: transparent !important; }
+    
+    /* === EFEK MEMUDAR (FADE-OUT) DI KOLOM INPUT BAWAH === */
+    [data-testid="stBottom"] { 
+        /* Membuat gradien kabut dari transparan ke warna background paling bawah (#0f1729) */
+        background: linear-gradient(180deg, transparent 0%, rgba(15, 23, 41, 0.85) 35%, rgba(15, 23, 41, 1) 100%) !important; 
+        padding-top: 70px !important; /* Jarak efek kabut sebelum menyentuh kotak input */
+        z-index: 99 !important;
+    }
+    [data-testid="stBottom"] > div { background: transparent !important; }
+    
+   /* === CHAT BUBBLE KANAN-KIRI === */
+    .stChatMessage {
+        background-color: transparent !important;
+        border: none !important;
+        margin-bottom: 1.5rem !important;
+    }
     
     /* USER CHAT (KANAN) */
-    [data-testid="stChatMessage"][aria-label="user"] {
-        flex-direction: row-reverse; /* Avatar di kanan */
-        background-color: rgba(0, 100, 255, 0.1); /* Biru tipis */
-        border-radius: 15px;
-        text-align: right;
+    div[data-testid="stChatMessage"]:has(.user-bubble) {
+        display: flex !important;
+        flex-direction: row-reverse !important;
+    }
+    div[data-testid="stChatMessage"]:has(.user-bubble) > div:nth-child(2) {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        border-radius: 18px 18px 4px 18px !important;
+        padding: 12px 18px !important;
+        color: white !important;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4) !important;
+        
+        margin-left: auto !important;  /* Ambil sisa ruang kosong di kiri, dorong kotak ke kanan */
+        margin-right: 15px !important; /* Kasih jarak dikit biar gak nabrak muka avatar */
+        
+        width: fit-content !important;
+        max-width: 75% !important;
+        flex-grow: 0 !important;
     }
     
-    /* BOT CHAT (KIRI) */
-    [data-testid="stChatMessage"][aria-label="assistant"] {
-        background-color: rgba(255, 255, 255, 0.05); /* Abu transparan */
-        border-radius: 15px;
+    div[data-testid="stChatMessage"]:has(.user-bubble) div[data-testid="stMarkdownContainer"] {
+        padding: 0 !important; margin: 0 !important;
     }
-
-    /* Timestamp Link Styling */
+    
+    div[data-testid="stChatMessage"]:has(.user-bubble) p {
+        margin: 0 !important; 
+        font-family: 'Inter', sans-serif !important; 
+        font-size: 1.05rem !important;
+        font-weight: 500 !important;
+        line-height: 1.5 !important;
+    }
+    
+    /* AI CHAT (KIRI) */
+    div[data-testid="stChatMessage"]:has(.bot-bubble) {
+        display: flex !important;
+        flex-direction: row !important;
+    }
+    div[data-testid="stChatMessage"]:has(.bot-bubble) > div:nth-child(2) {
+        background: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid rgba(102, 126, 234, 0.2) !important;
+        border-radius: 18px 18px 18px 4px !important;
+        padding: 12px 18px !important;
+        color: #e2e8f0 !important;
+        backdrop-filter: blur(10px) !important;
+        
+        margin-right: auto !important; /* Ambil sisa ruang kosong di kanan, dorong kotak ke kiri */
+        margin-left: 15px !important;  /* Kasih jarak dari muka bot */
+        
+        width: fit-content !important;
+        max-width: 85% !important;
+        flex-grow: 0 !important;
+    }
+    
+    div[data-testid="stChatMessage"]:has(.bot-bubble) div[data-testid="stMarkdownContainer"] {
+        padding: 0 !important; margin: 0 !important;
+    }
+    
+    div[data-testid="stChatMessage"]:has(.bot-bubble) p {
+        margin: 0 0 10px 0 !important;
+        line-height: 1.6 !important;
+    }
+    div[data-testid="stChatMessage"]:has(.bot-bubble) p:last-child {
+        margin-bottom: 0 !important; 
+    }
+    
+    /* === TIMESTAMP LINKS === */
     a.timestamp-link {
-        color: #00d9ff !important;
-        font-weight: bold;
-        text-decoration: none;
-        background: rgba(0, 217, 255, 0.1);
-        padding: 2px 6px;
-        border-radius: 4px;
-        transition: all 0.2s;
+        color: #a78bfa !important; font-weight: 600 !important; text-decoration: none !important;
+        background: rgba(167, 139, 250, 0.15) !important; padding: 3px 8px !important;
+        border-radius: 6px !important; transition: all 0.3s ease !important;
+        border: 1px solid rgba(167, 139, 250, 0.3) !important; display: inline-block !important;
     }
-    a.timestamp-link:hover { background: rgba(0, 217, 255, 0.3); }
+    a.timestamp-link:hover { background: rgba(167, 139, 250, 0.3) !important; transform: translateY(-2px) !important; }
     
-    /* Sidebar */
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
-        border-right: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    
-    .vs-badge {
-        font-size: 2rem; font-weight: 900; color: #ff4b4b; text-align: center;
-        background: rgba(255, 75, 75, 0.1); border-radius: 50%; width: 60px; height: 60px;
-        display: flex; align-items: center; justify-content: center; margin: 0 auto;
-    }
+    /* === SIDEBAR & UI LAINNYA === */
+    [data-testid="stSidebar"] { background: linear-gradient(180deg, #0f172a 0%, #1e1b4b 50%, #1e293b 100%) !important; border-right: 2px solid rgba(102, 126, 234, 0.3) !important; }
+    [data-testid="stSidebar"] h1 { background: linear-gradient(135deg, #667eea 0%, #a78bfa 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    [data-testid="stSidebar"] label { color: #cbd5e1 !important; font-weight: 500 !important; }
+    .stButton > button { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important; color: white !important; border: none !important; border-radius: 10px !important; padding: 12px 24px !important; font-weight: 600 !important; transition: all 0.3s ease !important; }
+    .stButton > button:hover { transform: translateY(-2px) !important; box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6) !important; }
+    .stButton > button[kind="primary"] { background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%) !important; }
+    .stTextInput > div > div > input, .stTextArea > div > div > textarea, [data-testid="stChatInput"] { background: rgba(255, 255, 255, 0.05) !important; border: 1px solid rgba(102, 126, 234, 0.3) !important; border-radius: 10px !important; color: white !important; }
+    .stTabs [data-baseweb="tab-list"] { background: rgba(255, 255, 255, 0.02); border-radius: 12px; padding: 4px; }
+    .stTabs [aria-selected="true"] { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white !important; }
+    .streamlit-expanderHeader { background: rgba(255, 255, 255, 0.05) !important; border: 1px solid rgba(102, 126, 234, 0.2) !important; border-radius: 10px !important; color: #cbd5e1 !important; }
+    .vs-badge { font-size: 2.5rem; font-weight: 900; background: linear-gradient(135deg, #ef4444 0%, #f59e0b 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-align: center; width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; margin: 0 auto; border: 3px solid rgba(239, 68, 68, 0.3); border-radius: 50%; background-color: rgba(239, 68, 68, 0.1); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
 </style>
 """, unsafe_allow_html=True)
 
@@ -75,7 +148,6 @@ def init_supabase():
     except: return None
 
 # --- PROMPTS ---
-# Update Prompt: Deteksi Sarkasme
 STRATEGY_PROMPT = """
 Kamu adalah Expert YouTube Strategist yang teliti. Analisis transkrip ini.
 
@@ -183,11 +255,8 @@ def search_channel_brain(query, channel, match_count=6):
         return resp.data if resp.data else []
     except: return []
 
-# --- LINK GENERATOR (REGEX) ---
 def make_timestamps_clickable(text, url):
-    """Mengubah [MM:SS] jadi Link, tapi cek dulu url-nya valid"""
     if not url: return text
-    
     def rep(m):
         ts = m.group(1)
         try:
@@ -197,45 +266,55 @@ def make_timestamps_clickable(text, url):
             else: return m.group(0)
             return f'<a href="{url}&t={total}s" target="_blank" class="timestamp-link">⏱️ {ts}</a>'
         except: return m.group(0)
-        
-    # Regex support [MM:SS] dan [H:MM:SS]
     return re.sub(r'\[(\d{1,2}:\d{2}(?::\d{2})?)\]', rep, text)
 
 # --- SESSION STATE PERSISTENCE ---
-# Inisialisasi variabel agar tidak hilang saat refresh/ganti tab
 if "rag_msgs" not in st.session_state: st.session_state.rag_msgs = []
 if "deep_data" not in st.session_state: st.session_state.deep_data = None
-if "deep_analysis_result" not in st.session_state: st.session_state.deep_analysis_result = None # Simpan hasil analisa deep
+if "deep_analysis_result" not in st.session_state: st.session_state.deep_analysis_result = None 
 if "competitor_result" not in st.session_state: st.session_state.competitor_result = None
 
 # --- NAVIGASI ---
 with st.sidebar:
-    st.header("🧠 Vye Brain")
-    app_mode = st.radio(
-        "Pilih Mode:",
-        ["🧠 Channel Brain", "📊 Deep Video Intelligence", "⚔️ Competitor Arena"],
-    )
+    st.markdown("""
+        <div style='text-align: center; padding: 20px 0;'>
+            <h1 style='font-size: 3rem; margin: 0; font-family: "Space Grotesk", sans-serif;'>🧠 Vye</h1>
+            <p style='color: #94a3b8; margin: 5px 0; font-size: 0.9rem;'>AI Content Intelligence</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    app_mode = st.radio("Pilih Mode:", ["🧠 Channel Brain", "📊 Deep Video Intelligence", "⚔️ Competitor Arena"])
     st.markdown("---")
 
     if app_mode == "🧠 Channel Brain":
         selected_channel = st.selectbox("📚 Knowledge Base:", get_unique_channels())
-        with st.expander("➕ Feed the Brain"):
-            url = st.text_input("URL"); name = st.text_input("Name")
-            if st.button("Ingest"):
-                import ingest_channel
-                c = ingest_channel.process_channel(url, name)
-                if c: st.success(f"{c} added!"); time.sleep(1); st.rerun()
+
 
 # --- MODE 1: CHANNEL BRAIN (RAG) ---
 if app_mode == "🧠 Channel Brain":
-    st.subheader(f"💬 Chat: {selected_channel}")
+    st.markdown(f"### 💬 Chat dengan {selected_channel}")
+    st.caption("Tanyakan apa saja tentang konten channel yang sudah diingat oleh Vye")
 
+    # 1. LOOP HISTORI (SEKARANG BISA BACA SUMBER)
     for m in st.session_state.rag_msgs:
-        with st.chat_message(m["role"]): st.markdown(m["content"])
+        with st.chat_message(m["role"]): 
+            marker = "<div class='user-bubble'></div>" if m["role"] == "user" else "<div class='bot-bubble'></div>"
+            st.markdown(marker + m["content"], unsafe_allow_html=True)
+            
+            # Tampilkan expander sumber jika ada di memori
+            if m.get("sources"):
+                with st.expander("📌 Sumber & Bukti"):
+                    for c in m["sources"]:
+                        link = make_timestamps_clickable(c['content'], c['video_url'])
+                        st.markdown(f"**📺 {c['video_title']}**")
+                        st.markdown(f"<div style='font-size:0.9em;color:#94a3b8;border-left:3px solid #667eea;padding-left:15px;margin:10px 0;'>...{link}...</div>", unsafe_allow_html=True)
 
+    # 2. PROSES INPUT BARU
     if q := st.chat_input("Tanya sesuatu..."):
         st.session_state.rag_msgs.append({"role": "user", "content": q})
-        with st.chat_message("user"): st.markdown(q)
+        with st.chat_message("user"): 
+            st.markdown(f"<div class='user-bubble'></div>{q}", unsafe_allow_html=True)
         
         with st.chat_message("assistant"):
             with st.spinner("🧠 Mengakses memori..."):
@@ -243,14 +322,12 @@ if app_mode == "🧠 Channel Brain":
                 ctx_txt = "".join([f"Video: {c['video_title']}\nContent: {c['content']}\n\n" for c in ctx])
                 hist = "\n".join([f"{m['role']}: {m['content']}" for m in st.session_state.rag_msgs[-4:]])
                 
-                # UPDATE PROMPT SARKASME
                 prompt = f"""
                 Kamu adalah Vye. Jawab pertanyaan user berdasarkan DATA CONTEKAN.
-                
                 ATURAN PENTING:
                 1. Gaya bahasa natural & luwes.
                 2. JANGAN tulis timestamp di teks jawaban utama.
-                3. HATI-HATI SARKASME: Jika di transkrip ada kalimat yang terdengar bercanda/mustahil (misal: "mau pindah ke Mars besok"), anggap itu sbg gurauan/sarkas, BUKAN fakta serius.
+                3. HATI-HATI SARKASME.
                 
                 RIWAYAT: {hist}
                 CONTEKAN: {ctx_txt}
@@ -259,22 +336,28 @@ if app_mode == "🧠 Channel Brain":
                 client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
                 res = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
                 
-                st.markdown(res.text)
-                st.session_state.rag_msgs.append({"role": "assistant", "content": res.text})
+                # Tampilkan AI reply dengan MARKER
+                st.markdown(f"<div class='bot-bubble'></div>{res.text}", unsafe_allow_html=True)
+                
+                # SIMPAN KE MEMORI (SEKARANG SUMBERNYA IKUT DISIMPAN)
+                st.session_state.rag_msgs.append({
+                    "role": "assistant", 
+                    "content": res.text,
+                    "sources": ctx  # <--- INI KUNCI UTAMANYA!
+                })
                 
                 if ctx:
                     with st.expander("📌 Sumber & Bukti"):
                         for c in ctx:
                             link = make_timestamps_clickable(c['content'], c['video_url'])
                             st.markdown(f"**📺 {c['video_title']}**")
-                            st.markdown(f"<div style='font-size:0.9em;color:#ccc;border-left:2px solid #333;padding-left:10px;'>...{link}...</div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='font-size:0.9em;color:#94a3b8;border-left:3px solid #667eea;padding-left:15px;margin:10px 0;'>...{link}...</div>", unsafe_allow_html=True)
 
-# --- MODE 2: DEEP VIDEO INTELLIGENCE (PERSISTENT) ---
+# --- MODE 2 & 3 TETAP SAMA SEPERTI SEBELUMNYA ---
 elif app_mode == "📊 Deep Video Intelligence":
-    st.header("📊 Deep Video Intelligence")
+    st.markdown("# 📊 Deep Video Intelligence")
     st.caption("Analisis komprehensif: Strategi, Virality Score, dan Thumbnail Audit.")
     
-    # Input URL (Default value dari session state kalau ada)
     default_url = st.session_state.deep_data['url'] if st.session_state.deep_data else ""
     url = st.text_input("🔗 YouTube URL", value=default_url, placeholder="https://youtube.com/watch?v=...")
     
@@ -283,46 +366,40 @@ elif app_mode == "📊 Deep Video Intelligence":
             with st.spinner("Extracting data..."):
                 trans, title, thumb = get_transcript_direct(url)
                 if trans:
-                    # Simpan ke session state biar gak ilang
                     st.session_state.deep_data = {"trans": trans, "title": title, "thumb": thumb, "url": url}
-                    st.session_state.deep_analysis_result = None # Reset hasil analisa lama
+                    st.session_state.deep_analysis_result = None 
                     st.rerun()
                 else: st.error("Gagal ambil data video.")
 
-    # Tampilkan Data jika ada di memory
     if st.session_state.deep_data:
         d = st.session_state.deep_data
-        st.image(d['thumb'], width=400)
-        st.subheader(d['title'])
+        col1, col2 = st.columns([1, 2])
+        with col1: st.image(d['thumb'], use_container_width=True)
+        with col2:
+            st.markdown(f"### {d['title']}")
+            st.caption(f"🔗 [Buka Video]({d['url']})")
         
+        st.markdown("---")
         tab1, tab2, tab3 = st.tabs(["📑 Strategy Report", "👁️ Thumbnail Audit", "💬 Chat"])
-        
         client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
         
         with tab1:
-            # Tombol generate (Cek session state dulu)
             if st.session_state.deep_analysis_result:
-                # Kalau sudah ada hasil, langsung tampilkan (biar gak generate ulang pas pindah tab)
                 st.markdown(st.session_state.deep_analysis_result, unsafe_allow_html=True)
-                if st.button("Regenerate Report"): # Opsi buat generate ulang
+                if st.button("🔄 Regenerate Report"): 
                     st.session_state.deep_analysis_result = None
                     st.rerun()
             else:
-                if st.button("Generate Strategy Report"):
+                if st.button("✨ Generate Strategy Report"):
                     with st.spinner("Analyzing strategy..."):
                         prompt = STRATEGY_PROMPT + d['trans'][:30000]
                         res = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-                        
-                        # PROSES LINK TIMESTAMP DI SINI
-                        # Ubah teks biasa jadi link yang bisa diklik
                         final_html = make_timestamps_clickable(res.text, d['url'])
-                        
-                        # Simpan hasil yang sudah ada link-nya ke session state
                         st.session_state.deep_analysis_result = final_html
                         st.rerun()
         
         with tab2:
-            if st.button("Audit Thumbnail"):
+            if st.button("🔍 Audit Thumbnail"):
                 with st.spinner("Scanning visuals..."):
                     img = load_image_from_url(d['thumb'])
                     if img:
@@ -330,52 +407,55 @@ elif app_mode == "📊 Deep Video Intelligence":
                         st.markdown(res.text)
         
         with tab3:
-            q = st.text_input("Tanya video ini:")
+            st.markdown("#### 💬 Tanya tentang video ini")
+            q = st.text_input("Ketik pertanyaan Anda:")
             if q:
-                # Chat juga dikasih clickable timestamp
-                prompt = f"Jawab berdasarkan transkrip ini:\n{d['trans'][:20000]}\n\nPertanyaan: {q}"
-                res = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-                linked_res = make_timestamps_clickable(res.text, d['url'])
-                st.markdown(linked_res, unsafe_allow_html=True)
+                with st.spinner("🧠 Berpikir..."):
+                    prompt = f"Jawab berdasarkan transkrip ini:\n{d['trans'][:20000]}\n\nPertanyaan: {q}"
+                    res = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+                    linked_res = make_timestamps_clickable(res.text, d['url'])
+                    st.markdown("---")
+                    st.markdown(linked_res, unsafe_allow_html=True)
 
-# --- MODE 3: COMPETITOR ARENA (BATTLE MODE) ---
 elif app_mode == "⚔️ Competitor Arena":
-    st.header("⚔️ Competitor Arena")
+    st.markdown("# ⚔️ Competitor Arena")
+    st.caption("Bandingkan dua video head-to-head dan dapatkan strategic insights")
     
-    col1, col2 = st.columns(2)
-    with col1: url_a = st.text_input("🔵 Video Kita (URL)")
-    with col2: url_b = st.text_input("🔴 Video Kompetitor (URL)")
+    col1, col_vs, col2 = st.columns([5, 1, 5])
+    with col1:
+        st.markdown("#### 🔵 Video Kita")
+        url_a = st.text_input("URL Video Kita", placeholder="https://youtube.com/watch?v=...", label_visibility="collapsed")
+    with col_vs: st.markdown("<div class='vs-badge'>VS</div>", unsafe_allow_html=True)
+    with col2:
+        st.markdown("#### 🔴 Video Kompetitor")
+        url_b = st.text_input("URL Video Kompetitor", placeholder="https://youtube.com/watch?v=...", label_visibility="collapsed")
     
-    # Gunakan session state untuk hasil battle juga
     if "battle_res" not in st.session_state: st.session_state.battle_res = None
 
-    if st.button("⚔️ FIGHT!"):
-        if url_a and url_b:
-            with st.spinner("Analyzing both videos..."):
-                ta, title_a, _ = get_transcript_direct(url_a)
-                tb, title_b, _ = get_transcript_direct(url_b)
-                
-                if ta and tb:
-                    prompt = f"""
-                    Lakukan analisis perbandingan antara dua video ini.
+    st.markdown("---")
+    col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
+    with col_btn2:
+        if st.button("⚔️ START BATTLE!", type="primary", use_container_width=True):
+            if url_a and url_b:
+                with st.spinner("⚡ Analyzing both videos..."):
+                    ta, title_a, _ = get_transcript_direct(url_a)
+                    tb, title_b, _ = get_transcript_direct(url_b)
                     
-                    VIDEO A (KITA): {title_a}
-                    TRANSKRIP A: {ta[:15000]}
-                    
-                    VIDEO B (KOMPETITOR): {title_b}
-                    TRANSKRIP B: {tb[:15000]}
-                    
-                    TUGAS:
-                    1. Siapa pemenangnya secara kualitas konten?
-                    2. Apa kelebihan Video A dibanding B?
-                    3. Apa kekurangan Video A dibanding B?
-                    4. Berikan saran strategi agar Video A bisa mengalahkan B.
-                    """
-                    client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-                    res = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-                    
-                    st.session_state.battle_res = f"### 🏆 Hasil: {title_a} vs {title_b}\n\n{res.text}"
-                    st.rerun()
+                    if ta and tb:
+                        prompt = f"""
+                        Lakukan analisis perbandingan:
+                        A: {title_a} ({ta[:15000]})
+                        B: {title_b} ({tb[:15000]})
+                        
+                        TUGAS: Siapa pemenang, kelebihan, kekurangan, dan strategi.
+                        """
+                        client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+                        res = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+                        st.session_state.battle_res = f"### 🏆 Hasil: {title_a} vs {title_b}\n\n{res.text}"
+                        st.rerun()
+                    else: st.error("Gagal mengambil data.")
+            else: st.warning("Mohon isi kedua URL video!")
 
     if st.session_state.battle_res:
+        st.markdown("---")
         st.markdown(st.session_state.battle_res)
