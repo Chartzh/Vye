@@ -14,7 +14,7 @@ from supabase import create_client
 # --- KONFIGURASI HALAMAN ---
 st.set_page_config(
     page_title="Vye - AI Content Intelligence",
-    page_icon="🧠",
+    page_icon="logo_favicon.png",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -276,12 +276,7 @@ if "competitor_result" not in st.session_state: st.session_state.competitor_resu
 
 # --- NAVIGASI ---
 with st.sidebar:
-    st.markdown("""
-        <div style='text-align: center; padding: 20px 0;'>
-            <h1 style='font-size: 3rem; margin: 0; font-family: "Space Grotesk", sans-serif;'>🧠 Vye</h1>
-            <p style='color: #94a3b8; margin: 5px 0; font-size: 0.9rem;'>AI Content Intelligence</p>
-        </div>
-    """, unsafe_allow_html=True)
+    st.image("logo.png", use_container_width=True)
     
     st.markdown("---")
     app_mode = st.radio("Pilih Mode:", ["🧠 Channel Brain", "📊 Deep Video Intelligence", "⚔️ Competitor Arena"])
@@ -328,6 +323,10 @@ if app_mode == "🧠 Channel Brain":
                 1. Gaya bahasa natural & luwes.
                 2. JANGAN tulis timestamp di teks jawaban utama.
                 3. HATI-HATI SARKASME.
+
+                ATURAN KETAT:
+                1. Jika jawaban TIDAK ADA di dalam DATA CONTEKAN, katakan: "Maaf, Bang David gak ada bahas spesifik soal itu di video-video yang gue inget sekarang."
+                2. JANGAN PERNAH mengarang informasi dari pengetahuan umum kamu sendiri.
                 
                 RIWAYAT: {hist}
                 CONTEKAN: {ctx_txt}
