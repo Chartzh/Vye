@@ -14,7 +14,7 @@ from supabase import create_client
 # --- KONFIGURASI HALAMAN ---
 st.set_page_config(
     page_title="Vye - AI Content Intelligence",
-    page_icon="logo_favicon.png",
+    page_icon="images/logo_favicon.png",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -276,7 +276,7 @@ if "competitor_result" not in st.session_state: st.session_state.competitor_resu
 
 # --- NAVIGASI ---
 with st.sidebar:
-    st.image("logo.png", use_container_width=True)
+    st.image("images/logo.png", use_container_width=True)
     
     st.markdown("---")
     app_mode = st.radio("Pilih Mode:", ["🧠 Channel Brain", "📊 Deep Video Intelligence", "⚔️ Competitor Arena"])

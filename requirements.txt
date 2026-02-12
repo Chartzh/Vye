@@ -1,8 +1,9 @@
-streamlit>=1.31.0
-google-generativeai>=0.3.0
-yt-dlp>=2024.1.0
-Pillow>=10.0.0
-fpdf>=1.7.2
-pandas>=2.0.0
-requests>=2.31.0
+streamlit
+google-genai
+yt-dlp
 supabase
+pandas
+fpdf
+Pillow
+requests
+psycopg2-binary
