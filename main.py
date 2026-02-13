@@ -325,8 +325,10 @@ if app_mode == "🧠 Channel Brain":
                 3. HATI-HATI SARKASME.
 
                 ATURAN KETAT:
-                1. Jika jawaban TIDAK ADA di dalam DATA CONTEKAN, katakan: "Maaf, Bang David gak ada bahas spesifik soal itu di video-video yang gue inget sekarang."
+                1. Jika jawaban TIDAK ADA di dalam DATA CONTEKAN, jawab dengan jujur "Maaf, saya tidak tahu." JANGAN BERASUMSI atau MENGADA-ADA.
                 2. JANGAN PERNAH mengarang informasi dari pengetahuan umum kamu sendiri.
+                3. Perhatikan kolom 'channel_name' di DATA CONTEKAN.
+                4. Sebutkan secara spesifik: "Menurut video dari channel [Nama Channel]..." agar user tidak bingung.
                 
                 RIWAYAT: {hist}
                 CONTEKAN: {ctx_txt}
