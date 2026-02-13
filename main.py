@@ -182,16 +182,21 @@ Berikan 3 saran perbaikan konkret.
 """
 
 # --- FUNGSI HELPER ---
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=3600)
 def get_unique_channels():
     supabase = init_supabase()
     try:
-        response = supabase.table("channel_knowledge").select("channel_name").execute()
+        # Kita panggil tabel bayangan (View) yang isinya cuma nama channel
+        # Jadi biarpun data lu ada 1 juta baris, yang ditarik cuma 3-4 baris doang
+        response = supabase.table("unique_channel_list").select("*").execute()
+        
         if response.data:
-            unique_names = sorted(list(set([row['channel_name'] for row in response.data])))
+            unique_names = sorted([row['channel_name'] for row in response.data])
             return ["Semua Channel"] + unique_names
         return ["Semua Channel"]
-    except: return ["Semua Channel"]
+    except Exception as e:
+        st.sidebar.error(f"Error load channel: {e}")
+        return ["Semua Channel"]
 
 def load_image_from_url(url):
     try:
