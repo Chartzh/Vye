@@ -334,7 +334,11 @@ if app_mode == "🧠 Channel Brain":
                 2. JANGAN PERNAH mengarang informasi dari pengetahuan umum kamu sendiri.
                 3. Perhatikan kolom 'channel_name' di DATA CONTEKAN.
                 4. Sebutkan secara spesifik: "Menurut video dari channel [Nama Channel]..." agar user tidak bingung.
-                
+                5. Jika 'channel_name' terlihat seperti judul video yang panjang, sebutkan saja: 
+                    "Berdasarkan konten yang saya pelajari..." 
+                    Tetapi jika 'channel_name' adalah nama orang (Ferry Irwandi/Raymond Chin), sebutkan: 
+                    "Menurut pandangan [Nama Channel]..."
+
                 RIWAYAT: {hist}
                 CONTEKAN: {ctx_txt}
                 PERTANYAAN: {q}
