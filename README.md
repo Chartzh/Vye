@@ -32,11 +32,25 @@ Vye processes long-form video transcripts into semantic chunks and stores them i
 * **Data Pipelines**: Automated transcript extraction and cleaning using `yt-dlp` before vectorization.
 * **UI/UX Engineering**: Advanced CSS injection to handle Streamlit’s markdown containers for a modern chat experience.
 
----
+<p align="center">
+  <br>
+  <img src="https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/aqua.png" width="100%">
+  <br>
+  <h2 align="center">📽️ LIVE DEMO VIDEO</h2>
+  <p align="center"><strong>See Vye in action: Witness the RAG architecture processing real-time queries.</strong></p>
+</p>
+
 <p align="center">
   <a href="https://www.youtube.com/watch?v=QgPIYkWFMzo">
-    <img src="https://img.youtube.com/vi/QgPIYkWFMzo/maxresdefault.jpg" alt="Vye Demo Video" width="100%" style="border-radius:10px;">
+    <img src="https://img.youtube.com/vi/QgPIYkWFMzo/maxresdefault.jpg" alt="Vye Demo Video" width="100%" style="border-radius:10px; box-shadow: 0px 10px 30px rgba(0,242,254,0.3);">
   </a>
   <br>
-  <em>📺 Click to watch the full Vye Demo on YouTube</em>
+  <br>
+  <a href="https://www.youtube.com/watch?v=QgPIYkWFMzo">
+    <img src="https://img.shields.io/badge/YOUTUBE-Watch%20Demo-red?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch on YouTube">
+  </a>
+</p>
+
+<p align="center">
+  <em>(Click the image or the button above to play the full technical demonstration)</em>
 </p>
