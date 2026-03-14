@@ -31,3 +31,12 @@ Vye processes long-form video transcripts into semantic chunks and stores them i
 * **Rate-Limit Management**: Implemented customized "cooling down" periods and batch processing to optimize Google AI Studio's Free Tier limits.
 * **Data Pipelines**: Automated transcript extraction and cleaning using `yt-dlp` before vectorization.
 * **UI/UX Engineering**: Advanced CSS injection to handle Streamlit’s markdown containers for a modern chat experience.
+
+---
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=QgPIYkWFMzo">
+    <img src="https://img.youtube.com/vi/QgPIYkWFMzo/maxresdefault.jpg" alt="Vye Demo Video" width="100%" style="border-radius:10px;">
+  </a>
+  <br>
+  <em>📺 Click to watch the full Vye Demo on YouTube</em>
+</p>
